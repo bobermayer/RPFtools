@@ -20,7 +20,7 @@ parser=OptionParser()
 parser.add_option('-b','--bed',dest='bed',help="12-column bed file with ORF definitions")
 parser.add_option('-B','--bam',dest='bam',help="comma-separated list of BAM files with mapped reads, should have indices")
 parser.add_option('-L','--L',dest='L',default='30',help="read lengths to use [30]")
-parser.add_option('-e','--exclude',dest='exclude',default='25',help="codons to exclude at beginning and end [25,1]")
+parser.add_option('-e','--exclude',dest='exclude',default='25,1',help="codons to exclude at beginning and end [25,1]")
 parser.add_option('-n','--names',dest='names',default=None,help="header names for bam files (comma-separated)")
 parser.add_option('-o','--offsets',dest='offsets',default='15',help="offsets from 5' end of read [15]")
 parser.add_option('-G','--genome',dest='genome',help="genome file (2bit format)")
@@ -28,7 +28,7 @@ parser.add_option('-s','--stranded',dest='stranded',default='yes',help="strand i
 
 options,args=parser.parse_args()
 
-if options.genome is Null:
+if options.genome is None:
 	raise Exception("you need to provide a 2-bit genome file!")
 
 genome=TwoBitFile(options.genome)
@@ -68,7 +68,7 @@ for n in range(nB):
 		sys.stdout.write('\t{0}_{1}'.format(c,names[n]))
 if nB > 1:
 	for c in codons:
-		sys.stdout.write('\t{0}_combined'.format(c))
+		sys.stdout.write('\t{0}_pooled'.format(c))
 sys.stdout.write('\n')
 
 nskipped=0
@@ -91,7 +91,7 @@ with open(options.bed) as inf:
 
 		orflen=rel_end-rel_start
 		if orflen < 3*sum(exclude) or orflen%3!=0:
-			print >> sys.stderr, 'skipping '+name
+			nskipped+=1
 			continue
 
 		if tx!=tx_old:
@@ -169,6 +169,7 @@ with open(options.bed) as inf:
 
 		if nB > 1:
 
+			# use pooled reads
 			cov_site_orf=np.sum(cov_site_orf,axis=0)
 			codon_cov=np.array([np.sum(cov_site_orf[codons_here==c]) for c in codons])
 

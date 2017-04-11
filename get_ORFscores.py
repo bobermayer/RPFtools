@@ -8,6 +8,7 @@ from optparse import OptionParser
 parser=OptionParser()
 parser.add_option('-b','--bed',dest='bed',help="12-column bed file with ORF definitions, should be sorted")
 parser.add_option('-B','--bam',dest='bam',help="comma-separated list of BAM files with mapped reads, should have indices")
+parser.add_option('-n','--names',dest='names',default=None,help="header names for bam files (comma-separated)")
 parser.add_option('-L','--L',dest='L',default='30',help="read lengths to use [30]")
 parser.add_option('-o','--offsets',dest='offsets',default='12',help="offsets of P-sites from 5' end of read [12]")
 parser.add_option('-s','--stranded',dest='stranded',default='yes',help="strand information (yes/no/reverse); default: yes")
@@ -27,22 +28,29 @@ Lmax=max(map(max,LL))
 Lmin=min(map(min,LL))
 offset=[dict(zip(LL[n],map(int,options.offsets.split('|')[n].split(',')))) for n in range(nB)]
 
-tx_old=''
+if options.names is not None:
+	names=dict((n,x.strip()) for n,x in enumerate(options.names.split(',')))
+	if len(names)!=nB:
+		raise Exception("number of header names doesn't match number of bam files")
+else:
+	names=dict(zip(range(nB),range(1,nB+1)))
 
 print >> sys.stderr, 'using bed file',options.bed
 
 sys.stdout.write('# bed file: '+options.bed+'\n# bam files:\n')
 for n in range(nB):
-	sys.stdout.write('#  {0}: {1} ({2} reads)\n'.format(n+1,options.bam.split(',')[n],nmapped[n]))
+	sys.stdout.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
 
 sys.stdout.write('# ORF')
 for n in range(nB):
-	sys.stdout.write('\tRPM_tx_{0}\tRPM_orf_{0}\tORFscore_{0}\tcov_p0_{0}\tfrac_multimapper_{0}'.format(n+1))
+	sys.stdout.write('\tRPM_tx_{0}\tRPM_orf_{0}\tORFscore_{0}\tcov_p0_{0}\tfrac_multimapper_{0}'.format(names[n]))
 if nB > 1:
-	sys.stdout.write('\tRPM_tx_tot\tRPM_orf_tot\tORFscore_tot\tcov_p0_tot\tfrac_multimapper_tot\n')
+	sys.stdout.write('\tRPM_tx_pooled\tRPM_orf_pooled\tORFscore_pooled\tcov_p0_pooled\tfrac_multimapper_pooled\n')
 else:
 	sys.stdout.write('\n')
 				 
+tx_old=''
+
 with open(options.bed) as inf:
 
 	for line in inf:

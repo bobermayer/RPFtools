@@ -28,10 +28,13 @@ parser.add_option('-o','--out',dest='out',help="""output file [stdout]""")
 
 options,args=parser.parse_args()
 
-annotation=pd.read_csv(options.annotation,header=None,index_col=3,sep='\t')
-tx_stats=pd.read_csv(options.bed,header=0,index_col=1,sep='\t')
-annotation=annotation.join(tx_stats)
+# read in bed file and combine with transcript-gene mappings from options.annotation
+annotation=pd.read_csv(options.bed,header=None,index_col=3,sep='\t').join(pd.read_csv(options.annotation,header=0,index_col=1,sep='\t'))
+# compute CDS length
 annotation['CDSlen']=annotation.apply(get_CDSlen,axis=1)
+# group by gene ID and choose entry with longest CDS
 annotation=annotation.groupby('gene_id').aggregate(lambda df: df.loc[df['CDSlen'].argmax()]).reset_index()
+# set "name" column in bed to "gene_id"
 annotation[3]=annotation['gene_id']
+# write in bed format
 annotation.to_csv(sys.stdout if options.out is None else options.out,sep='\t',header=None,index=None,columns=range(12))

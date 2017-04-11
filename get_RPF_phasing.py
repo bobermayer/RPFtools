@@ -16,7 +16,7 @@ parser.add_option('-b','--bed',dest='bed',help='12-column bed file with ORF defi
 parser.add_option('-B','--bam',dest='bam',help='comma-separated list of BAM files with mapped reads, need to have indices')
 parser.add_option('-l','--Lmin',dest='Lmin',default=27,type=int,help='min read length to use [27]')
 parser.add_option('-L','--Lmax',dest='Lmax',default=31,type=int,help='max read length ot use [31]')
-parser.add_option('-p','--pdf',dest='pdf',help='name of output pdf file')
+parser.add_option('-o','--out',dest='out',help='name of output figure file')
 parser.add_option('-s','--stranded',dest='stranded',default='yes',help="strand information (yes/no/reverse) [yes]")
 parser.add_option('','--offset',dest='offset',default=12,type=int,help="P-site offset [12]")
 
@@ -29,14 +29,13 @@ nL=Lmax-Lmin+1
 print >> sys.stderr, 'using bam files',options.bam
 bam_files=[pysam.Samfile(bam.strip(),'rb') for bam in options.bam.split(',')]
 
-tx_old=''
-
 print >> sys.stderr, 'using bed file',options.bed
 
 cov_start=np.zeros((nL,108),dtype=int)
 cov_stop=np.zeros((nL,108),dtype=int)
 cov_tot=np.zeros((nL,3))
 n=0
+nskipped=0
 
 with open(options.bed) as inf:
 
@@ -59,47 +58,44 @@ with open(options.bed) as inf:
 		rel_end=sum(exon_size[:le])+(cend-tstart-exon_start[le])
 
 		if (rel_end-rel_start)%3!=0:
-			print >> sys.stderr, 'non-canonical coding sequence for '+name
+			nskipped+=1
 			continue
 
-		if tx!=tx_old:
+		try:
+			cov=np.zeros((nL,txlen),dtype=np.uint16)
+		except MemoryError:
+			print >> sys.stderr, 'not enough memory for {0}; skipping this transcript'.format(name)
+			continue
 
-			try:
-				cov=np.zeros((nL,txlen),dtype=np.uint16)
-			except MemoryError:
-				print >> sys.stderr, 'not enough memory for {0}; skipping this transcript'.format(name)
+		for bam in bam_files:
+			if chrom not in bam.references:
+				chrom=chrom.strip('chr')
+			if chrom not in bam.references:
 				continue
-
-			for bam in bam_files:
-				if chrom not in bam.references:
-					chrom=chrom.strip('chr')
-				if chrom not in bam.references:
+			for read in bam.fetch(chrom,max(0,tstart-Lmax),tend+Lmax):
+				if read.is_unmapped or read.is_duplicate or read.is_qcfail:
 					continue
-				for read in bam.fetch(chrom,max(0,tstart-Lmax),tend+Lmax):
-					if read.is_unmapped or read.is_duplicate or read.is_qcfail:
-						continue
-					# ignore reads with soft-clipped nucleotides
-					if read.cigar[0][0]==4 or read.cigar[-1][0]==4:
-						continue
-					pos=read.positions
-					rlen=len(pos)
-					if rlen < Lmin or rlen > Lmax:
-						continue
-					if strand=='-' and (options.stranded=='yes' and read.is_reverse or\
-										options.stranded=='reverse' and not read.is_reverse or\
-										options.stranded=='no'):
-						psite=pos[-options.offset-1]-tstart
-					elif strand=='+' and (options.stranded=='yes' and not read.is_reverse or\
-										  options.stranded=='reverse' and read.is_reverse or\
-										  options.stranded=='no'):
-						psite=pos[options.offset]-tstart
-					else:
-						continue
-					if psite >= 0 and psite < txlen:
-						cov[rlen-Lmin,psite]+=1
+				# ignore reads with soft-clipped nucleotides
+				if read.cigar[0][0]==4 or read.cigar[-1][0]==4:
+					continue
+				pos=read.positions
+				rlen=len(pos)
+				if rlen < Lmin or rlen > Lmax:
+					continue
+				if strand=='-' and (options.stranded=='yes' and read.is_reverse or\
+									options.stranded=='reverse' and not read.is_reverse or\
+									options.stranded=='no'):
+					psite=pos[-options.offset-1]-tstart
+				elif strand=='+' and (options.stranded=='yes' and not read.is_reverse or\
+									  options.stranded=='reverse' and read.is_reverse or\
+									  options.stranded=='no'):
+					psite=pos[options.offset]-tstart
+				else:
+					continue
+				if psite >= 0 and psite < txlen:
+					cov[rlen-Lmin,psite]+=1
 
-			cov_here=np.concatenate([cov[:,est:est+esi] for est,esi in zip(exon_start,exon_size)],axis=1)
-			tx_old=tx
+		cov_here=np.concatenate([cov[:,est:est+esi] for est,esi in zip(exon_start,exon_size)],axis=1)
 
 		cov_orf=cov_here[:,rel_start-9:rel_end+9]
 		if strand=='-':
@@ -112,10 +108,10 @@ with open(options.bed) as inf:
 			cov_tot+=np.array([np.sum(cov_orf[:,(12+k):(-12+k):3],axis=1) for k in range(3)]).T
 			n+=1
 
-print >> sys.stderr, ''
+print >> sys.stderr, 'done ({0} skipped)'.format(nskipped)
 
 fig=plt.figure(1,figsize=(7,nL))
-plt.clf()
+fig.clf()
 
 dL=1./nL-.02
 d=dL-.06
@@ -123,25 +119,30 @@ top=(nL-1)/float(nL)+.01
 
 for k in range(nL):
 
-	fig.text(.01,top-(k-.5)*dL,range(Lmin,Lmax+1)[k],size=6,rotation=90,ha='center',va='center')
+	fig.text(.01,top-(k-.5)*dL,'{0} nt'.format(range(Lmin,Lmax+1)[k]),size=6,rotation=90,ha='center',va='center')
 
 	if np.sum(cov_start[k]) > 0:
-		ax=plt.axes([.08,top-k*dL,.35,d])
+		ax=fig.add_axes([.08,top-k*dL,.35,d])
 		[ax.vlines(np.arange(-9,99)[i::3],0,cov_start[k,i::3],color='rgb'[i]) for i in range(3)]
 		ax.set_xlim([-10,100])
+	if k==nL-1:
+		ax.set_xlabel('distance from start [nt]')
 
 	if np.sum(cov_stop[k]) > 0:
-		ax=plt.axes([.51,top-k*dL,.35,d])
+		ax=fig.add_axes([.51,top-k*dL,.35,d])
 		[ax.vlines(np.arange(-99,9)[i::3],0,cov_stop[k,i::3],color='rgb'[i]) for i in range(3)]
 		ax.set_xlim([-100,10])
+	if k==nL-1:
+		ax.set_xlabel('distance from stop [nt]')
 
 	if np.sum(cov_tot[k]) > 0:
-		ax=plt.axes([.9,top-k*dL,.08,d])
+		ax=fig.add_axes([.9,top-k*dL,.08,d])
 		[ax.bar(i,cov_tot[k,i]/float(np.sum(cov_tot[k])),color='rgb'[i]) for i in range(3)]
 		ax.set_ylim([0,1])
 		ax.set_xticks([.5,1.5,2.5])
 		ax.set_xticklabels([0,1,2])
+	if k==nL-1:
+		ax.set_xlabel('% frame')
 
-plt.suptitle(options.bam)
-
-plt.savefig(options.pdf)
+fig.suptitle(options.bam)
+fig.savefig(options.out)

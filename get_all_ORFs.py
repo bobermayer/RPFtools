@@ -8,13 +8,11 @@ import hashlib
 from twobitreader import TwoBitFile
 from string import maketrans
 from optparse import OptionParser
-from Bio import SeqIO
 
-def get_tx_info (bed_file):
-
-	tx_info={}
+def parse_bed_file (bed_file):
 
 	with open(bed_file) as inf:
+
 		for line in inf:
 			ls=line.split()
 			chrom,tstart,tend,tx,_,strand,cstart,cend,_,nexons,exon_size,exon_start=ls
@@ -36,9 +34,22 @@ def get_tx_info (bed_file):
 				cdslen=0
 			if strand=='-':
 				utr5len,utr3len=utr3len,utr5len
-			tx_info[tx]=dict(coding=coding,nexons=nexons,length=sum(exon_size),utr5len=utr5len,utr3len=utr3len,cdslen=cdslen,chrom=chrom,start=tstart,end=tend,strand=strand,exon_size=exon_size,exon_start=exon_start,cstart=cstart,cend=cend,rel_start=utr5len,rel_end=utr5len+cdslen)
-
-	return tx_info
+			yield (tx,dict(coding=coding,\
+						   nexons=nexons,\
+						   length=sum(exon_size),\
+						   utr5len=utr5len,\
+						   utr3len=utr3len,\
+						   cdslen=cdslen,\
+						   chrom=chrom,\
+						   start=tstart,\
+						   end=tend,\
+						   strand=strand,\
+						   exon_size=exon_size,\
+						   exon_start=exon_start,\
+						   cstart=cstart,\
+						   cend=cend,\
+						   rel_start=utr5len,\
+						   rel_end=utr5len+cdslen))
 
 codon_translate={'TTT': 'F','TTC':'F','TTA':'L','TTG':'L','CTT':'L','CTC':'L','CTA':'L','CTG':'L','ATT':'I','ATC':'I','ATA':'I','ATG':'M','GTT':'V','GTC':'V','GTA':'V','GTG':'V','TCT':'S','TCC':'S','TCA':'S','TCG':'S','CCT':'P','CCC':'P','CCA':'P','CCG':'P','ACT':'T','ACC':'T','ACA':'T','ACG':'T','GCT':'A','GCC':'A','GCA':'A','GCG':'A','TAT':'Y','TAC':'Y','TAA':'*','TAG':'*','CAT':'H','CAC':'H','CAA':'Q','CAG':'Q','AAT':'N','AAC':'N','AAA':'K','AAG':'K','GAT':'D','GAC':'D','GAA':'E','GAG':'E','TGT':'C','TGC':'C','TGA':'*','TGG':'W','CGT':'R','CGC':'R','CGA':'R','CGG':'R','AGT':'S','AGC':'S','AGA':'R','AGG':'R','GGT':'G','GGC':'G','GGA':'G','GGG':'G'}
 
@@ -116,20 +127,21 @@ def find_ORFs (tx, info, seq):
 	stop_stops=[(all_stops[f][n],all_stops[f][n+1]) for f in range(3) for n in range(len(all_stops[f])-1)]
 	# get relative coordinates of start-stop in the same frame
 	start_stops=[(stop1+seq[stop1:stop2].index('ATG'),stop2) for stop1,stop2 in stop_stops if 'ATG' in seq[stop1:stop2] and seq[stop1:stop2].index('ATG')%3==0]
-	return dict((tx+'_'+get_abs_coords(info,start,stop),(start,stop,translate(seq[start:stop]))) for start,stop in start_stops)
+	for start,stop in start_stops:
+		yield (tx+'_'+get_abs_coords(info,start,stop),(start,stop,translate(seq[start:stop])))
 
 parser=OptionParser()
 parser.add_option('-b','--bed_file',dest='bed',help="bed-file to use (12-column UCSC style)")
 parser.add_option('-G','--genome',dest='genome',help="genome (2bit file)")
 parser.add_option('-s','--stats',dest='stats',help="write orf stats to this csv file")
 parser.add_option('-o','--outfile',dest='outfile',help="write output to this file (default: stdout)")
+parser.add_option('','--minlength',dest='minlength',default=6,help="""minimum ORF length (in nt, including stop) [12]""")
 
 options,args=parser.parse_args()
 
 print >> sys.stderr, 'reading genome from '+options.genome
 genome=TwoBitFile(options.genome)
 print >> sys.stderr, 'reading bed file '+options.bed
-tx_info=get_tx_info(options.bed)
 
 orfs=[]
 hash_values=[]
@@ -161,7 +173,8 @@ else:
 	print >> sys.stderr, 'writing to '+options.outfile
 	outf=open(options.outfile,'w')
 
-for tx,info in tx_info.iteritems():
+for tx,info in parse_bed_file(options.bed):
+
 	if info['coding']:
 		rel_start,rel_end=get_rel_coords(info,info['cstart'],info['cend'])
 		seq=get_sequence(genome,info,rel_start,rel_end)
@@ -174,11 +187,12 @@ for tx,info in tx_info.iteritems():
 		orf_length.append(rel_end-rel_start)
 		utr5_length.append(rel_start)
 		utr3_length.append(info['length']-rel_end)
-	ORFs=find_ORFs(tx, info, get_sequence(genome,info,0,info['length']))
-	for orf,(rel_start,rel_end,seq) in ORFs.iteritems():
-		if rel_end-rel_start <= 6:
+
+	for orf,(rel_start,rel_end,seq) in find_ORFs(tx, info, get_sequence(genome,info,0,info['length'])):
+		if rel_end-rel_start <= options.minlength:
 			continue
 		rel_frame=(info['rel_start']-rel_start)%3
+
 		if info['coding']:
 			if rel_start < info['rel_start']:
 				if rel_end < info['rel_start']:
@@ -194,6 +208,7 @@ for tx,info in tx_info.iteritems():
 				orf_type='utr3:utr3:{0}'.format(rel_frame)
 		else:
 			orf_type='nc:nc'
+
 		coords=orf.split('_')[1]
 		abs_start,abs_end=map(int,coords.split(':')[1].split('-'))
 		if abs_start!=info['cstart'] and abs_end!=info['cend']:
@@ -208,6 +223,10 @@ for tx,info in tx_info.iteritems():
 
 if options.stats is not None:
 	print >> sys.stderr, 'saving stats as '+options.stats
-	df=pd.DataFrame(data={'orf_type':orf_types,'orf_length':orf_length,'utr5_length':utr5_length,'utr3_length':utr3_length,'orf_hash': hash_values},index=orfs)
+	df=pd.DataFrame(data={'orf_type':orf_types,\
+						  'orf_length':orf_length,\
+						  'utr5_length':utr5_length,\
+						  'utr3_length':utr3_length,\
+						  'orf_hash': hash_values},index=orfs)
 	df.to_csv(options.stats)
 

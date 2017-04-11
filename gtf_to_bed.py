@@ -1,5 +1,6 @@
 import os
 import sys
+import gzip
 import numpy as np
 from optparse import OptionParser
 
@@ -14,7 +15,10 @@ options,args=parser.parse_args()
 if options.infile is None:
 	inf=sys.stdin
 else:
-	inf=open(options.infile)
+	if options.infile.endswith('.gz'):
+		inf=gzip.open(options.infile)
+	else:
+		inf=open(options.infile)
 
 if options.chrominfo is not None:
 	chrominfo={}
