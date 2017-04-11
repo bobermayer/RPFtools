@@ -1,4 +1,4 @@
-#RPFtools
+# RPFtools
 
 RPFtools is a collection of scripts for the analysis of ribosome profiling data.
 
@@ -43,7 +43,7 @@ takes all reads of length 29 and 30nt with 12nt offset over the ORFs of the bed 
 ```
 python get_ORFscores.py -b annotation.all_ORFs.bed -B RPF.bam -L "29,30" -o "12,12" > ORFscores.out
 ```
-calculates ORFscores [Bazzini et al.](http://emboj.embopress.org/content/33/9/981.long) for each ORF in the input bed file, using reads of length 29 and 30nt with 12nt offset. Output contains reads per million mapped over transcript and ORF, ORFscore, % of p0 positions covered and fraction of multimappers contributing to these scores. If multiple bam files are given using ``-B RPF_1.bam,RPF_2.bam``, scores are also calculated using pooled reads (use ``-L "29,30|29,30"`` and ``-o "12,12|12,12" to specify lengths and offsets).
+calculates ORFscores ([Bazzini et al.](http://emboj.embopress.org/content/33/9/981.long)) for each ORF in the input bed file, using reads of length 29 and 30nt with 12nt offset. Output contains reads per million mapped over transcript and ORF, ORFscore, % of p0 positions covered and fraction of multimappers contributing to these scores. If multiple bam files are given using ``-B RPF_1.bam,RPF_2.bam``, scores are also calculated using pooled reads (use ``-L "29,30|29,30"`` and ``-o "12,12|12,12"`` to specify lengths and offsets).
 
 ### analyze codon coverage
 ```
