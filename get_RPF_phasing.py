@@ -68,10 +68,12 @@ with open(options.bed) as inf:
 			continue
 
 		for bam in bam_files:
+
 			if chrom not in bam.references:
 				chrom=chrom.strip('chr')
 			if chrom not in bam.references:
 				continue
+
 			for read in bam.fetch(chrom,max(0,tstart-Lmax),tend+Lmax):
 				if read.is_unmapped or read.is_duplicate or read.is_qcfail:
 					continue

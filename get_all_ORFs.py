@@ -135,7 +135,7 @@ parser.add_option('-b','--bed_file',dest='bed',help="bed-file to use (12-column 
 parser.add_option('-G','--genome',dest='genome',help="genome (2bit file)")
 parser.add_option('-s','--stats',dest='stats',help="write orf stats to this csv file")
 parser.add_option('-o','--outfile',dest='outfile',help="write output to this file (default: stdout)")
-parser.add_option('','--minlength',dest='minlength',default=6,help="""minimum ORF length (in nt, including stop) [12]""")
+parser.add_option('','--minlength',dest='minlength',default=12,help="""minimum ORF length (in nt, including stop) [12]""")
 
 options,args=parser.parse_args()
 
@@ -189,7 +189,7 @@ for tx,info in parse_bed_file(options.bed):
 		utr3_length.append(info['length']-rel_end)
 
 	for orf,(rel_start,rel_end,seq) in find_ORFs(tx, info, get_sequence(genome,info,0,info['length'])):
-		if rel_end-rel_start <= options.minlength:
+		if rel_end-rel_start < options.minlength:
 			continue
 		rel_frame=(info['rel_start']-rel_start)%3
 
