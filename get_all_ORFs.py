@@ -213,7 +213,7 @@ for tx,info in parse_bed_file(options.bed):
 		abs_start,abs_end=map(int,coords.split(':')[1].split('-'))
 		if abs_start!=info['cstart'] and abs_end!=info['cend']:
 			orf_hash=hashlib.md5(seq).hexdigest()
-			outf.write('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\t{8}\t{9}\t{10}\t{11}\n'.format(info['chrom'],info['start'],info['end'],orf+':'+orf_hash+'_'+orf_type,0,info['strand'],abs_start-1,abs_end,0,info['nexons'],','.join(map(str,info['exon_size']))+',',','.join(map(str,info['exon_start']))+','))
+			outf.write('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\t{8}\t{9}\t{10}\t{11}\n'.format(info['chrom'],info['start'],info['end'],orf+'_'+orf_hash+'_'+orf_type,0,info['strand'],abs_start-1,abs_end,0,info['nexons'],','.join(map(str,info['exon_size']))+',',','.join(map(str,info['exon_start']))+','))
 			orfs.append(orf)
 			hash_values.append(orf_hash)
 			orf_types.append(match_type(orf_type))
@@ -227,6 +227,6 @@ if options.stats is not None:
 						  'orf_length':orf_length,\
 						  'utr5_length':utr5_length,\
 						  'utr3_length':utr3_length,\
-						  'orf_hash': hash_values},index=orfs)
+						  'orf_hash': hash_values},index=pd.MultiIndex.from_tuples([('_'.join(o.split('_')[:-1]),o.split('_')[-1]) for o in orfs],names=['name','orf_coords']))
 	df.to_csv(options.stats)
 

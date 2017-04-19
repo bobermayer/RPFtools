@@ -33,36 +33,47 @@ if options.genome is None:
 
 genome=TwoBitFile(options.genome)
 
-print >> sys.stderr, 'using bam files',options.bam
-try:
-	bam_files=[pysam.Samfile(bam.strip(),'rb') for bam in options.bam.split(',')]
-	nmapped=np.array([bam.mapped for bam in bam_files])
-	nB=len(bam_files)
-except:
-	raise Exception ("couldn't open bam files")
+if options.bam is not None:
+	print >> sys.stderr, 'using bam files',options.bam
+	try:
+		bam_files=[pysam.Samfile(bam.strip(),'rb') for bam in options.bam.split(',')]
+		nmapped=np.array([bam.mapped for bam in bam_files])
+		nB=len(bam_files)
+	except:
+		raise Exception ("couldn't open bam files")
 
-if options.names is not None:
-	names=dict((n,x.strip()) for n,x in enumerate(options.names.split(',')))
-	if len(names)!=nB:
-		raise Exception("number of header names doesn't match number of bam files")
+	if options.names is not None:
+		names=dict((n,x.strip()) for n,x in enumerate(options.names.split(',')))
+		if len(names)!=nB:
+			raise Exception("number of header names doesn't match number of bam files")
+	else:
+		names=dict(zip(range(nB),range(1,nB+1)))
+
+	LL=[map(int,options.L.split('|')[n].split(',')) for n in range(nB)]
+	Lmax=max(map(max,LL))
+	Lmin=min(map(min,LL))
+	offset=[dict(zip(LL[n],map(int,options.offsets.split('|')[n].split(',')))) for n in range(nB)]
+
 else:
-	names=dict(zip(range(nB),range(1,nB+1)))
+	bam_files=[]
+	nB=0
 
-LL=[map(int,options.L.split('|')[n].split(',')) for n in range(nB)]
-Lmax=max(map(max,LL))
-Lmin=min(map(min,LL))
-offset=[dict(zip(LL[n],map(int,options.offsets.split('|')[n].split(',')))) for n in range(nB)]
 exclude=map(int,options.exclude.split(','))
 
 tx_old=''
 
 print >> sys.stderr, 'using bed file',options.bed
 
-sys.stdout.write('# bed files: '+options.bed+'\n# bam files:\n')
-for n in range(nB):
-	sys.stdout.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
+sys.stdout.write('# bed files: '+options.bed)
+if nB > 0:
+	sys.stdout.write('\n# bam files:\n')
+	for n in range(nB):
+		sys.stdout.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
 
 sys.stdout.write('ORF')
+if nB==0:
+	sys.stdout.write('\t'+'\t'.join(codons)+'\n')
+	
 for n in range(nB):
 	for c in codons:
 		sys.stdout.write('\t{0}_{1}'.format(c,names[n]))
@@ -141,42 +152,51 @@ with open(options.bed) as inf:
 		if strand=='-':
 			orf_seq=RC(orf_seq)
 
-		cov_site_orf=cov_site_tx[:,rel_start:rel_end]
-		if strand=='-':
-			cov_site_orf=cov_site_orf[:,::-1]
-
-		# exclude ramp and stop codons as specified by exclude and sum up reads from 3 frames
-		if exclude[1] > 0:
-			cov_site_orf=np.sum([cov_site_orf[:,3*exclude[0]+k:-3*exclude[1]:3] for k in range(3)],axis=0)
-		else:
-			cov_site_orf=np.sum([cov_site_orf[:,3*exclude[0]+k::3] for k in range(3)],axis=0)
-
 		codons_here=np.array([orf_seq[3*k:3*k+3] for k in range(exclude[0],orflen/3-exclude[1])])
 		aa_seq=''.join(codon_translate[c] for c in codons_here)
 
-		if len(codons_here)!=cov_site_orf.shape[1]:
-			raise Exception("lengths don't match!")
+		if nB > 0:
 
-		if np.sum(cov_site_orf)==0 or '*' in aa_seq.rstrip('*'):
-			nskipped+=1
-			continue
+			cov_site_orf=cov_site_tx[:,rel_start:rel_end]
+			if strand=='-':
+				cov_site_orf=cov_site_orf[:,::-1]
 
-		sys.stdout.write("{0}".format(name))
+			# exclude ramp and stop codons as specified by exclude and sum up reads from 3 frames
+			if exclude[1] > 0:
+				cov_site_orf=np.sum([cov_site_orf[:,3*exclude[0]+k:-3*exclude[1]:3] for k in range(3)],axis=0)
+			else:
+				cov_site_orf=np.sum([cov_site_orf[:,3*exclude[0]+k::3] for k in range(3)],axis=0)
 
-		codon_cov=np.array([np.sum(cov_site_orf[:,codons_here==c],axis=1) for c in codons])
+			if len(codons_here)!=cov_site_orf.shape[1]:
+				raise Exception("lengths don't match!")
 
-		for n in range(nB):
-			for k in range(len(codons)):
-				sys.stdout.write('\t{0}'.format(codon_cov[k,n]))
+			if np.sum(cov_site_orf)==0 or '*' in aa_seq.rstrip('*'):
+				nskipped+=1
+				continue
 
-		if nB > 1:
+			sys.stdout.write("{0}".format(name))
 
-			# use pooled reads
-			cov_site_orf=np.sum(cov_site_orf,axis=0)
-			codon_cov=np.array([np.sum(cov_site_orf[codons_here==c]) for c in codons])
+			codon_cov=np.array([np.sum(cov_site_orf[:,codons_here==c],axis=1) for c in codons])
 
-			for k in range(len(codons)):
-				sys.stdout.write('\t{0}'.format(codon_cov[k]))
+			for n in range(nB):
+				for k in range(len(codons)):
+					sys.stdout.write('\t{0}'.format(codon_cov[k,n]))
+
+			if nB > 1:
+
+				# use pooled reads
+				cov_site_orf=np.sum(cov_site_orf,axis=0)
+				codon_cov=np.array([np.sum(cov_site_orf[codons_here==c]) for c in codons])
+
+				for k in range(len(codons)):
+					sys.stdout.write('\t{0}'.format(codon_cov[k]))
+		else:
+
+			sys.stdout.write("{0}".format(name))
+			for c in codons:
+				sys.stdout.write('\t{0}'.format(np.sum(codons_here==c)))
+
+
 
 		sys.stdout.write("\n")
 
