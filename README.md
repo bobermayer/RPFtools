@@ -47,6 +47,6 @@ calculates ORFscores ([Bazzini et al.](http://emboj.embopress.org/content/33/9/9
 
 ### analyze codon coverage
 ```
-python get_RPF_codon_counts.py -b annotation.collapsed.bed -B RPF.bam -L "29,30" -o "12,12" -G genome.2bit > RPF_codon_counts.out
+python get_RPF_counts_per_codon.py -b annotation.collapsed.bed -B RPF.bam -L "29,30" -o "12,12" -G genome.2bit > RPF_codon_counts.out
 ```
 aggregates for each ORF in the input bed file all P-site counts (for A-site counts, use ``-o 15``) over all codons. First and last codons can be excluded using ``-e`` (default: 25,1). 
