@@ -64,23 +64,22 @@ tx_old=''
 
 print >> sys.stderr, 'using bed file',options.bed
 
-sys.stdout.write('# bed files: '+options.bed)
+sys.stdout.write('# bed files: '+options.bed+'\n')
 if nB > 0:
-	sys.stdout.write('\n# bam files:\n')
+	sys.stdout.write('# bam files:\n')
 	for n in range(nB):
 		sys.stdout.write('#  {0}: {1} ({2} reads)\n'.format(names[n],options.bam.split(',')[n],nmapped[n]))
 
 sys.stdout.write('ORF')
 if nB==0:
 	sys.stdout.write('\t'+'\t'.join(codons)+'\n')
-	
-for n in range(nB):
-	for c in codons:
-		sys.stdout.write('\t{0}_{1}'.format(c,names[n]))
-if nB > 1:
+else:
+	for n in range(nB):
+		for c in codons:
+			sys.stdout.write('\t{0}_{1}'.format(c,names[n]))
 	for c in codons:
 		sys.stdout.write('\t{0}_pooled'.format(c))
-sys.stdout.write('\n')
+	sys.stdout.write('\n')
 
 nskipped=0
 				 
@@ -103,6 +102,9 @@ with open(options.bed) as inf:
 		orflen=rel_end-rel_start
 		if orflen < 3*sum(exclude) or orflen%3!=0:
 			nskipped+=1
+			continue
+
+		if chrom not in genome:
 			continue
 
 		if tx!=tx_old:
