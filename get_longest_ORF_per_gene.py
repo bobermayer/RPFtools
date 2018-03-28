@@ -24,7 +24,7 @@ def get_CDSlen (ls, only_complete=False, genome=None):
     rel_end=sum(exon_size[:le])+(cend-tstart-exon_start[le])
     coding=(cstart < cend)
     if not coding:
-        return 0
+        return None
     if only_complete and chrom in genome:
         seq=''.join(genome[chrom][tstart+estart:tstart+estart+esize].upper() for estart,esize in zip(exon_start,exon_size))[rel_start:rel_end]
         if strand=='-':
@@ -32,7 +32,7 @@ def get_CDSlen (ls, only_complete=False, genome=None):
         if len(seq)%3==0 and seq[:3]=='ATG' and seq[-3:] in ['TAA','TGA','TAG']:
             return rel_end-rel_start
         else:
-            return 0
+            return None
     else:
         return rel_end-rel_start
 
@@ -57,7 +57,7 @@ else:
     annotation['CDSlen']=annotation.apply(get_CDSlen,axis=1)
 
 # group by gene ID and choose entry with longest CDS
-annotation=annotation.groupby('gene_id').aggregate(lambda df: df.loc[df['CDSlen'].idxmax()]).reset_index()
+annotation=annotation.dropna().groupby('gene_id').aggregate(lambda df: df.loc[df['CDSlen'].idxmax()]).reset_index()
 # set "name" column in bed to "gene_id"
 annotation[3]=annotation['gene_id']
 
