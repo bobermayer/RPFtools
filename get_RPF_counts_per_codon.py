@@ -25,6 +25,7 @@ parser.add_option('-n','--names',dest='names',default=None,help="header names fo
 parser.add_option('-o','--offsets',dest='offsets',default='15',help="offsets from 5' end of read [15]")
 parser.add_option('-G','--genome',dest='genome',help="genome file (2bit format)")
 parser.add_option('-s','--stranded',dest='stranded',default='yes',help="strand information (yes/no/reverse) [yes]")
+parser.add_option('','--only_complete',dest='only_complete',action='store_true',default=False,help="use only complete ORFs (ATG-stop) ")
 
 options,args=parser.parse_args()
 
@@ -100,7 +101,7 @@ with open(options.bed) as inf:
 		rel_end=sum(exon_size[:le])+(cend-tstart-exon_start[le])
 
 		orflen=rel_end-rel_start
-		if orflen < 3*sum(exclude) or orflen%3!=0:
+		if orflen < 3*sum(exclude):
 			nskipped+=1
 			continue
 
@@ -153,6 +154,10 @@ with open(options.bed) as inf:
 		orf_seq=txseq[rel_start:rel_end]
 		if strand=='-':
 			orf_seq=RC(orf_seq)
+
+        if options.only_complete and (orf_seq[0:3]!='ATG' or orf_seq[-3:] not in ['TAA','TGA','TAG'] or orflen%3!=0):
+            nskipped+=1
+            continue
 
 		codons_here=np.array([orf_seq[3*k:3*k+3] for k in range(exclude[0],orflen/3-exclude[1])])
 		aa_seq=''.join(codon_translate[c] for c in codons_here)
